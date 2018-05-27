@@ -1,0 +1,314 @@
+From 2cca2e03c81b52dc9668f56122987c732a9004d1 Mon Sep 17 00:00:00 2001
+From: Tianyi Wang <glglwty@gmail.com>
+Date: Sat, 26 May 2018 23:02:23 -0700
+Subject: [PATCH] Build kudu on nix
+
+---
+ CMakeLists.txt                                     |  9 ++++----
+ cmake_modules/FindBitshuffle.cmake                 |  4 ++++
+ cmake_modules/FindLz4.cmake                        |  3 +++
+ cmake_modules/FindMustache.cmake                   |  4 ++++
+ cmake_modules/FindSqueasel.cmake                   |  4 ++++
+ cmake_modules/FindThrift.cmake                     |  4 ++--
+ src/kudu/cfile/bloomfile-test-base.h               |  1 +
+ src/kudu/cfile/cfile-test-base.h                   |  1 +
+ src/kudu/codegen/CMakeLists.txt                    |  6 +++++-
+ src/kudu/experiments/rwlock-perf.cc                |  4 +---
+ src/kudu/hms/CMakeLists.txt                        |  6 ++++--
+ src/kudu/integration-tests/linked_list-test-util.h |  1 +
+ src/kudu/master/CMakeLists.txt                     |  2 ++
+ src/kudu/tools/CMakeLists.txt                      |  2 +-
+ src/kudu/tserver/CMakeLists.txt                    |  2 ++
+ src/kudu/util/debug/unwind_safeness.cc             | 25 ----------------------
+ 16 files changed, 40 insertions(+), 38 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index a180a725a..e17c81f86 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1059,12 +1059,13 @@ ADD_THIRDPARTY_LIB(libev
+ ## LZ4
+ find_package(Lz4 REQUIRED)
+ include_directories(SYSTEM ${LZ4_INCLUDE_DIR})
+-ADD_THIRDPARTY_LIB(lz4 STATIC_LIB "${LZ4_STATIC_LIB}")
++message(${LZ4_INCLUDE_DIR})
++ADD_THIRDPARTY_LIB(lz4 STATIC_LIB "${LZ4_STATIC_LIB}" SHARED_LIB "${LZ4_SHARED_LIB}")
+ 
+ ## Bitshuffle
+ find_package(Bitshuffle REQUIRED)
+ include_directories(SYSTEM ${BITSHUFFLE_INCLUDE_DIR})
+-ADD_THIRDPARTY_LIB(bitshuffle STATIC_LIB "${BITSHUFFLE_STATIC_LIB}")
++ADD_THIRDPARTY_LIB(bitshuffle STATIC_LIB "${BITSHUFFLE_STATIC_LIB}" SHARED_LIB "${BITSHUFFLE_SHARED_LIB}")
+ 
+ ## ZLib
+ find_package(Zlib REQUIRED)
+@@ -1077,13 +1078,13 @@ ADD_THIRDPARTY_LIB(zlib
+ find_package(Squeasel REQUIRED)
+ include_directories(SYSTEM ${SQUEASEL_INCLUDE_DIR})
+ ADD_THIRDPARTY_LIB(squeasel
+-  STATIC_LIB "${SQUEASEL_STATIC_LIB}")
++  STATIC_LIB "${SQUEASEL_STATIC_LIB}" SHARED_LIB "${SQUEASEL_SHARED_LIB}")
+ 
+ ## Mustache
+ find_package(Mustache REQUIRED)
+ include_directories(SYSTEM ${MUSTACHE_INCLUDE_DIR})
+ ADD_THIRDPARTY_LIB(mustache
+-  STATIC_LIB "${MUSTACHE_STATIC_LIB}")
++  STATIC_LIB "${MUSTACHE_STATIC_LIB}" SHARED_LIB "${MUSTACHE_SHARED_LIB}")
+ 
+ ## OpenSSL
+ ##
+diff --git a/cmake_modules/FindBitshuffle.cmake b/cmake_modules/FindBitshuffle.cmake
+index 8caae6407..072fa2ebf 100644
+--- a/cmake_modules/FindBitshuffle.cmake
++++ b/cmake_modules/FindBitshuffle.cmake
+@@ -30,6 +30,10 @@ find_library(BITSHUFFLE_STATIC_LIB bitshuffle.a
+   NO_CMAKE_SYSTEM_PATH
+   NO_SYSTEM_ENVIRONMENT_PATH)
+ 
++find_library(BITSHUFFLE_SHARED_LIB libbitshuffle.so
++  NO_CMAKE_SYSTEM_PATH
++  NO_SYSTEM_ENVIRONMENT_PATH)
++
+ include(FindPackageHandleStandardArgs)
+ find_package_handle_standard_args(BITSHUFFLE REQUIRED_VARS
+   BITSHUFFLE_STATIC_LIB BITSHUFFLE_INCLUDE_DIR)
+diff --git a/cmake_modules/FindLz4.cmake b/cmake_modules/FindLz4.cmake
+index 362d493f7..f3f70a818 100644
+--- a/cmake_modules/FindLz4.cmake
++++ b/cmake_modules/FindLz4.cmake
+@@ -25,6 +25,9 @@ find_path(LZ4_INCLUDE_DIR lz4.h
+   # make sure we don't accidentally pick up a different version
+   NO_CMAKE_SYSTEM_PATH
+   NO_SYSTEM_ENVIRONMENT_PATH)
++find_library(LZ4_SHARED_LIB lz4
++  NO_CMAKE_SYSTEM_PATH
++  NO_SYSTEM_ENVIRONMENT_PATH)
+ find_library(LZ4_STATIC_LIB liblz4.a
+   NO_CMAKE_SYSTEM_PATH
+   NO_SYSTEM_ENVIRONMENT_PATH)
+diff --git a/cmake_modules/FindMustache.cmake b/cmake_modules/FindMustache.cmake
+index e1e38f735..ec9d2d1b5 100644
+--- a/cmake_modules/FindMustache.cmake
++++ b/cmake_modules/FindMustache.cmake
+@@ -29,6 +29,10 @@ find_library(MUSTACHE_STATIC_LIB libmustache.a
+   NO_CMAKE_SYSTEM_PATH
+   NO_SYSTEM_ENVIRONMENT_PATH)
+ 
++find_library(MUSTACHE_SHARED_LIB libmustache.so
++  NO_CMAKE_SYSTEM_PATH
++  NO_SYSTEM_ENVIRONMENT_PATH)
++
+ include(FindPackageHandleStandardArgs)
+ find_package_handle_standard_args(MUSTACHE REQUIRED_VARS
+   MUSTACHE_STATIC_LIB MUSTACHE_INCLUDE_DIR)
+diff --git a/cmake_modules/FindSqueasel.cmake b/cmake_modules/FindSqueasel.cmake
+index 631a4bf13..62f0755ca 100644
+--- a/cmake_modules/FindSqueasel.cmake
++++ b/cmake_modules/FindSqueasel.cmake
+@@ -29,6 +29,10 @@ find_library(SQUEASEL_STATIC_LIB libsqueasel.a
+   NO_CMAKE_SYSTEM_PATH
+   NO_SYSTEM_ENVIRONMENT_PATH)
+ 
++find_library(SQUEASEL_SHARED_LIB libsqueasel.so
++  NO_CMAKE_SYSTEM_PATH
++  NO_SYSTEM_ENVIRONMENT_PATH)
++
+ include(FindPackageHandleStandardArgs)
+ find_package_handle_standard_args(SQUEASEL REQUIRED_VARS
+   SQUEASEL_STATIC_LIB SQUEASEL_INCLUDE_DIR)
+diff --git a/cmake_modules/FindThrift.cmake b/cmake_modules/FindThrift.cmake
+index 834bbfd87..98d0afc53 100644
+--- a/cmake_modules/FindThrift.cmake
++++ b/cmake_modules/FindThrift.cmake
+@@ -105,7 +105,7 @@ function(THRIFT_GENERATE_CPP SRCS HDRS TGTS)
+     # TODO(dan): Add the fb303 files manually. This is a complete hack.
+     list(APPEND ${SRCS} "${THRIFT_CC_OUT}" "fb303_types.cpp" "fb303_constants.cpp" "FacebookService.cpp")
+     list(APPEND ${HDRS} "${THRIFT_H_OUT}" "fb303_types.h" "fb303_constants.h" "FacebookService.h")
+-
++    find_path(FB303_ROOT share/fb303/if/fb303.thrift)
+     add_custom_command(
+       OUTPUT ${THRIFT_CC_OUT} ${THRIFT_H_OUT}
+       DEPENDS ${ABS_FIL}
+@@ -116,7 +116,7 @@ function(THRIFT_GENERATE_CPP SRCS HDRS TGTS)
+         --out ${ARG_BINARY_ROOT}
+         -I ${ARG_SOURCE_ROOT}
+         # Used to find built-in .thrift files (e.g. fb303.thrift)
+-        -I ${THIRDPARTY_INSTALL_CURRENT_DIR}
++        -I ${FB303_ROOT}
+         ${EXTRA_THRIFT_PATH_ARGS} ${ABS_FIL}
+       COMMENT "Running C++ thrift compiler on ${FIL}"
+       VERBATIM )
+diff --git a/src/kudu/cfile/bloomfile-test-base.h b/src/kudu/cfile/bloomfile-test-base.h
+index a702d32b9..0c3627704 100644
+--- a/src/kudu/cfile/bloomfile-test-base.h
++++ b/src/kudu/cfile/bloomfile-test-base.h
+@@ -19,6 +19,7 @@
+ 
+ #include <glog/logging.h>
+ #include <gtest/gtest.h>
++#include <gflags/gflags.h>
+ 
+ #include "kudu/cfile/bloomfile.h"
+ #include "kudu/fs/fs_manager.h"
+diff --git a/src/kudu/cfile/cfile-test-base.h b/src/kudu/cfile/cfile-test-base.h
+index e21ba838f..11678cc43 100644
+--- a/src/kudu/cfile/cfile-test-base.h
++++ b/src/kudu/cfile/cfile-test-base.h
+@@ -19,6 +19,7 @@
+ #define KUDU_CFILE_TEST_BASE_H
+ 
+ #include <glog/logging.h>
++#include <gflags/gflags.h>
+ #include <algorithm>
+ #include <functional>
+ #include <stdlib.h>
+diff --git a/src/kudu/codegen/CMakeLists.txt b/src/kudu/codegen/CMakeLists.txt
+index c8bbbb0cf..bdc3100cf 100644
+--- a/src/kudu/codegen/CMakeLists.txt
++++ b/src/kudu/codegen/CMakeLists.txt
+@@ -51,7 +51,7 @@ llvm_map_components_to_libnames(llvm_LIBRARIES "${LLVM_REQ_COMPONENTS}")
+ #######################################
+ 
+ ## Create .ll file for precompiled functions (and their dependencies).
+-set(CLANG_EXEC ${THIRDPARTY_DIR}/clang-toolchain/bin/clang++)
++set(CLANG_EXEC clang++)
+ set(IR_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/precompiled.cc)
+ set(IR_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/precompiled.ll)
+ set(IR_OUTPUT_CC ${IR_OUTPUT}.cc)
+@@ -70,6 +70,10 @@ if (APPLE)
+   set(PREFIXED_IR_INCLUDES
+     ${PREFIXED_IR_INCLUDES}
+     -cxx-isystem "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1")
++else()
++  set(PREFIXED_IR_INCLUDES
++  ${PREFIXED_IR_INCLUDES}
++  -isystem ${LIBSTDCXX_INCLUDE} -isystem ${LIBSTDCXX_INCLUDE}/x86_64-unknown-linux-gnu -isystem ${LIBC_INCLUDE})
+ endif()
+ 
+ # Get preprocessing definitions, which enable directives for glog and gtest.
+diff --git a/src/kudu/experiments/rwlock-perf.cc b/src/kudu/experiments/rwlock-perf.cc
+index d51cb9a39..5551e87c4 100644
+--- a/src/kudu/experiments/rwlock-perf.cc
++++ b/src/kudu/experiments/rwlock-perf.cc
+@@ -46,9 +46,7 @@ using std::vector;
+ 
+ class my_spinlock : public boost::detail::spinlock {
+  public:
+-  my_spinlock() {
+-    v_ = 0;
+-  }
++  my_spinlock() { boost::detail::spinlock::unlock(); }
+ 
+  private:
+   DISALLOW_COPY_AND_ASSIGN(my_spinlock);
+diff --git a/src/kudu/hms/CMakeLists.txt b/src/kudu/hms/CMakeLists.txt
+index fbc4c6e1d..28e9a427f 100644
+--- a/src/kudu/hms/CMakeLists.txt
++++ b/src/kudu/hms/CMakeLists.txt
+@@ -52,9 +52,11 @@ execute_process(COMMAND ln -nsf
+                 "${JAVA_HOME}"
+                 "${EXECUTABLE_OUTPUT_PATH}/java-home")
+ 
++find_path(HIVE_ROOT bin/hive)
++find_path(HADOOP_ROOT bin/hadoop)
+ file(GLOB DEPENDENCY_JARS
+-  "${CMAKE_SOURCE_DIR}/thirdparty/installed/common/opt/hive/lib/*"
+-  "${CMAKE_SOURCE_DIR}/thirdparty/installed/common/opt/hadoop/share/hadoop/common/*")
++  "${HIVE_ROOT}/lib/*"
++  "${HADOOP_ROOT}/share/hadoop/common/*")
+ 
+ add_jar(hms-plugin
+   "${CMAKE_SOURCE_DIR}/java/kudu-hive/src/main/java/org/apache/kudu/hive/metastore/KuduMetastorePlugin.java"
+diff --git a/src/kudu/integration-tests/linked_list-test-util.h b/src/kudu/integration-tests/linked_list-test-util.h
+index 252d6406e..90d83e502 100644
+--- a/src/kudu/integration-tests/linked_list-test-util.h
++++ b/src/kudu/integration-tests/linked_list-test-util.h
+@@ -24,6 +24,7 @@
+ #include <vector>
+ 
+ #include <glog/logging.h>
++#include <gflags/gflags.h>
+ 
+ #include "kudu/client/client-test-util.h"
+ #include "kudu/client/client.h"
+diff --git a/src/kudu/master/CMakeLists.txt b/src/kudu/master/CMakeLists.txt
+index 07c756550..bf4fb9554 100644
+--- a/src/kudu/master/CMakeLists.txt
++++ b/src/kudu/master/CMakeLists.txt
+@@ -82,3 +82,5 @@ target_link_libraries(kudu-master
+   ${KRB5_REALM_OVERRIDE}
+   master
+   ${KUDU_BASE_LIBS})
++
++install(TARGETS kudu-master RUNTIME DESTINATION bin)
+\ No newline at end of file
+diff --git a/src/kudu/tools/CMakeLists.txt b/src/kudu/tools/CMakeLists.txt
+index fd3ccb434..aa1db001f 100644
+--- a/src/kudu/tools/CMakeLists.txt
++++ b/src/kudu/tools/CMakeLists.txt
+@@ -119,7 +119,7 @@ target_link_libraries(kudu
+   tserver
+   ${KUDU_BASE_LIBS}
+ )
+-
++install(TARGETS kudu RUNTIME DESTINATION bin)
+ #######################################
+ # kudu_tools_test_util
+ #######################################
+diff --git a/src/kudu/tserver/CMakeLists.txt b/src/kudu/tserver/CMakeLists.txt
+index c411e92c0..11d63c7d5 100644
+--- a/src/kudu/tserver/CMakeLists.txt
++++ b/src/kudu/tserver/CMakeLists.txt
+@@ -146,6 +146,8 @@ target_link_libraries(kudu-tserver
+   tserver
+   ${KUDU_BASE_LIBS})
+ 
++install(TARGETS kudu-tserver RUNTIME DESTINATION bin)
++
+ #########################################
+ # tserver_test_util
+ #########################################
+diff --git a/src/kudu/util/debug/unwind_safeness.cc b/src/kudu/util/debug/unwind_safeness.cc
+index c8e0adf60..ab2b7fe2b 100644
+--- a/src/kudu/util/debug/unwind_safeness.cc
++++ b/src/kudu/util/debug/unwind_safeness.cc
+@@ -91,7 +91,6 @@ void *dlsym_or_die(const char *sym) {
+ // 1) In ASAN builds, the sanitizer runtime ends up calling dl_iterate_phdr from its
+ //    initialization.
+ // 2) OpenSSL in FIPS mode calls dlopen() within its constructor.
+-__attribute__((constructor))
+ void InitIfNecessary() {
+   // Dynamic library initialization is always single-threaded, so there's no
+   // need for any synchronization here.
+@@ -138,27 +137,3 @@ bool SafeToUnwindStack() {
+ 
+ } // namespace debug
+ } // namespace kudu
+-
+-extern "C" {
+-
+-void *dlopen(const char *filename, int flag) { // NOLINT
+-  InitIfNecessary();
+-  ScopedBumpDepth d;
+-  return CALL_ORIG(dlopen, filename, flag);
+-}
+-
+-int dlclose(void *handle) { // NOLINT
+-  InitIfNecessary();
+-  ScopedBumpDepth d;
+-  return CALL_ORIG(dlclose, handle);
+-}
+-
+-#ifdef HOOK_DL_ITERATE_PHDR
+-int dl_iterate_phdr(dl_iterate_phdr_cbtype callback, void *data) { // NOLINT
+-  InitIfNecessary();
+-  ScopedBumpDepth d;
+-  return CALL_ORIG(dl_iterate_phdr, callback, data);
+-}
+-#endif
+-
+-}
+-- 
+2.16.3
+
